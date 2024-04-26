@@ -20,6 +20,7 @@ bl_info = {
 import os
 import bpy
 import bpy_extras
+import cv2
 import numpy as np
 from bpy.props import PointerProperty, BoolProperty
 import math 
@@ -36,15 +37,48 @@ import time, sys
 # Miscellaneous Functions
 #--------------------------------------------------------------
 
+def _convert_pixel_buffer_to_matrix(buffer, width, height, channels):
+	# Converts a 1-D pixel buffer into an xy grid with n Colour channels
+	buffer = buffer.reshape(height, width, channels)
+	return buffer
+
+def _convert_matrix_to_pixel_buffer(buffer):
+	# Converts back to 1-D pixel buffer
+	buffer = buffer.flatten()
+	return buffer		
+
 def GRAINCREATOR_FN_generateGrain(name, width, height):
-	# LOOK AT DREAM TEXTURES TO SEE HOW ITS GENERATING IMAGES INSIDE OF BLENDER & SAVING THEM TO THE BLEND FILE 
 	# lets do a single frame of grain first
 	# can get width & height from render settings, not image 
 	img = bpy.data.images.new(name=name, width=width, height=height)
-	pixels = [1.0] * (4 * width * height)
+
+	# Define the noise characteristics for each color channel
+	noise_freqs = [0.1, 0.2, 0.3]
+	noise_amps = [10, 5, 15]
+
+	pixels_to_paint = np.ones(4 * img.size[0] * img.size[1], dtype=np.float32)
+
+	img.pixels.foreach_get(pixels_to_paint) # is this selecting pixels?
+	
+	pixels_to_paint = _convert_pixel_buffer_to_matrix(pixels_to_paint, img.size[0], img.size[1], 4)
+
+	# GENERATE NOISE HERE
+	# ------------------------
+	pixels_to_paint[:] = [0.5, 0.5, 0.5, 1.0] 
+	# ------------------------
+
+	pixels_to_paint = _convert_matrix_to_pixel_buffer(pixels_to_paint)
+
+	img.pixels.foreach_set(pixels_to_paint)
+	img.update()	
+
 	return img
 
-def MATTEPAINTER_FN_contextOverride(area_to_check):
+def GRAINCREATOR_FN_addNodeGroupToCompositor():
+	# just create a node group & add it to compositor, user can plug the shit in manually 
+	return 
+
+def GRAINCREATOR_FN_contextOverride(area_to_check):
 	return [area for area in bpy.context.screen.areas if area.type == area_to_check][0]
 
 #--------------------------------------------------------------
@@ -101,8 +135,19 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 		layout = self.layout		
 		view = context.space_data
 		scene = context.scene
+
+		# Grain Settings
+
+		# Create Grain
 		row = layout.row()
 		button_create_grain = row.operator(GRAINCREATOR_OT_generateGrain.bl_idname, text="Create Grain", icon="FILE_IMAGE")
+
+		# Save Grain 
+		row = layout.row()
+		button_export_grain = row.operator(GRAINCREATOR_OT_generateGrain.bl_idname, text="Export Grain", icon_value=727)
+
+		
+
 
 
 #--------------------------------------------------------------
