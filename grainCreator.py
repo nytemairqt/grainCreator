@@ -54,6 +54,7 @@ def GRAINCREATOR_FN_generateGrain(name):
 
 	img = bpy.data.images.new(name=name, width=w, height=h)
 	pixels_to_paint = np.ones(4 * w * h, dtype=np.float32)	
+
 	pixels_to_paint = _convert_pixel_buffer_to_matrix(pixels_to_paint, w, h, 4)
 
 	# GENERATE NOISE HERE
@@ -61,14 +62,15 @@ def GRAINCREATOR_FN_generateGrain(name):
 
 	color_grain = False
 
-	# Probably a better way than nesting loops
-	for y in range(h):
-		for x in range(w):
-			for i in range(3):
-				if color_grain:
-					pixels_to_paint[y, x, i] = random.random()
-				else:
-					pixels_to_paint[y, x, :3] = random.random()
+	# Create random values to insert
+	r = np.random.rand(*pixels_to_paint.shape)
+
+	if color_grain:
+		pixels_to_paint[:, :, 0:3] = r[:, :, 0:3]
+	else:
+		pixels_to_paint[:, :, 0:3] = r[:, :, 0:1]
+
+	pixels_to_paint = np.clip(pixels_to_paint, 0.6, 0.8)
 
 	# ------------------------
 	pixels_to_paint = _convert_matrix_to_pixel_buffer(pixels_to_paint)
