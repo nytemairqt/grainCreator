@@ -24,6 +24,7 @@ import cv2
 import numpy as np
 from bpy.props import PointerProperty, BoolProperty
 import math 
+import random
 from mathutils import Vector
 import mathutils
 from bpy_extras.image_utils import load_image
@@ -47,28 +48,30 @@ def _convert_matrix_to_pixel_buffer(buffer):
 	buffer = buffer.flatten()
 	return buffer		
 
-def GRAINCREATOR_FN_generateGrain(name, width, height):
-	# lets do a single frame of grain first
-	# can get width & height from render settings, not image 
-	img = bpy.data.images.new(name=name, width=width, height=height)
+def GRAINCREATOR_FN_generateGrain(name):
+	w = bpy.data.scenes[0].render.resolution_x
+	h = bpy.data.scenes[0].render.resolution_y
 
-	# Define the noise characteristics for each color channel
-	noise_freqs = [0.1, 0.2, 0.3]
-	noise_amps = [10, 5, 15]
-
-	pixels_to_paint = np.ones(4 * img.size[0] * img.size[1], dtype=np.float32)
-
-	img.pixels.foreach_get(pixels_to_paint) # is this selecting pixels?
-	
-	pixels_to_paint = _convert_pixel_buffer_to_matrix(pixels_to_paint, img.size[0], img.size[1], 4)
+	img = bpy.data.images.new(name=name, width=w, height=h)
+	pixels_to_paint = np.ones(4 * w * h, dtype=np.float32)	
+	pixels_to_paint = _convert_pixel_buffer_to_matrix(pixels_to_paint, w, h, 4)
 
 	# GENERATE NOISE HERE
 	# ------------------------
-	pixels_to_paint[:] = [0.5, 0.5, 0.5, 1.0] 
+
+	color_grain = False
+
+	# Probably a better way than nesting loops
+	for y in range(h):
+		for x in range(w):
+			for i in range(3):
+				if color_grain:
+					pixels_to_paint[y, x, i] = random.random()
+				else:
+					pixels_to_paint[y, x, :3] = random.random()
+
 	# ------------------------
-
 	pixels_to_paint = _convert_matrix_to_pixel_buffer(pixels_to_paint)
-
 	img.pixels.foreach_set(pixels_to_paint)
 	img.update()	
 
@@ -102,8 +105,7 @@ class GRAINCREATOR_OT_generateGrain(bpy.types.Operator):
 	bl_description = "Generates custom film grain image or sequence."
 
 	def execute(self, context):
-		# call func
-		GRAINCREATOR_FN_generateGrain(name="myCoolGrain", width=1920, height=1080)
+		GRAINCREATOR_FN_generateGrain(name="myCoolGrain")
 		return {'FINISHED'}
 
 class GRAINCREATOR_OT_createNodeGroup(bpy.types.Operator):
