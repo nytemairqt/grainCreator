@@ -55,9 +55,14 @@ def GRAINCREATOR_FN_generateGrain(name):
 	clip_min = .4
 	clip_max = .7
 
+	# KEEP ME
 	img = bpy.data.images.new(name=name, width=w, height=h)
-	pixels_to_paint = np.ones(4 * w * h, dtype=np.float32)	
 
+	# test sequence
+	#seq = bpy.data.images.new(name='mySeq', width=w, height=h)
+	#seq.source = 'SEQUENCE'
+
+	pixels_to_paint = np.ones(4 * w * h, dtype=np.float32)	
 	pixels_to_paint = _convert_pixel_buffer_to_matrix(pixels_to_paint, w, h, 4)	
 
 	# GENERATE NOISE HERE
@@ -78,7 +83,13 @@ def GRAINCREATOR_FN_generateGrain(name):
 	# ------------------------
 	pixels_to_paint = _convert_matrix_to_pixel_buffer(pixels_to_paint)
 	img.pixels.foreach_set(pixels_to_paint)
+	img.pack()
 	img.update()	
+
+	# Show generated grain in Image Editor 
+	for area in bpy.context.screen.areas:
+		if area.type == 'IMAGE_EDITOR':
+			area.spaces.active.image = img
 
 	return img
 
@@ -111,6 +122,7 @@ class GRAINCREATOR_OT_generateGrain(bpy.types.Operator):
 
 	start: bpy.props.IntProperty(name='start', default=1)
 	end: bpy.props.IntProperty(name='end', default=1)
+	sequence: bpy.props.BoolProperty(name='sequence', default=False)
 
 	def execute(self, context):
 		# Assert valid frame range.
@@ -120,8 +132,27 @@ class GRAINCREATOR_OT_generateGrain(bpy.types.Operator):
 
 		sequence_length = (self.end - self.start) + 1 if self.end > self.start else 1
 
+		seq = []
+
 		for i in range(sequence_length):
-			GRAINCREATOR_FN_generateGrain(name=f"grain_{i+1}")
+			grain = GRAINCREATOR_FN_generateGrain(name=f"grain_{i+1}")
+			if self.sequence:
+				seq.append(grain)
+
+		if self.sequence:
+			scene = bpy.context.scene
+			compositor_node_tree = scene.node_tree
+
+			image_node = compositor_node_tree.nodes.new(type="CompositorNodeImage")
+			image_node.image = seq[0]
+			image_node.image.source = 'SEQUENCE'
+			image_node.frame_duration = len(seq)
+
+
+
+
+
+
 		return {'FINISHED'}
 
 class GRAINCREATOR_OT_createNodeGroup(bpy.types.Operator):
@@ -132,6 +163,18 @@ class GRAINCREATOR_OT_createNodeGroup(bpy.types.Operator):
 
 	def execute(self, context):
 		return{'FINISHED'}
+
+############# TEMP
+class GRAINCREATOR_OT_clearUnused(bpy.types.Operator):
+	# Purges unused Data Blocks.
+	bl_idname = "graincreator.clear_unused"
+	bl_label = "Clear Unused"
+	bl_description = "Removes unlinked data from the Blend File. WARNING: This process cannot be undone"
+	bl_options = {"REGISTER"}
+
+	def execute(self, context):
+		bpy.ops.outliner.orphans_purge('INVOKE_DEFAULT' if True else 'EXEC_DEFAULT', num_deleted=0, do_local_ids=True, do_linked_ids=False, do_recursive=True)
+		return {'FINISHED'}
 
 #--------------------------------------------------------------
 # Interface
@@ -156,6 +199,11 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 
 		# Grain Settings
 
+		# Start & End Frames
+		row = layout.row()
+		row.prop(context.scene, 'GRAINCREATOR_VAR_start', text='Start')
+		row.prop(context.scene, 'GRAINCREATOR_VAR_end', text='End')
+
 		# Create Grain
 		row = layout.row()
 		button_create_grain = row.operator(GRAINCREATOR_OT_generateGrain.bl_idname, text="Create Grain", icon="FILE_IMAGE")
@@ -164,13 +212,13 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 		row = layout.row()
 		button_export_grain = row.operator(GRAINCREATOR_OT_generateGrain.bl_idname, text="Export Grain", icon_value=727)
 
-		# Start & End Frames
-		row = layout.row()
-		row.prop(context.scene, 'GRAINCREATOR_VAR_start', text='Start')
-		row.prop(context.scene, 'GRAINCREATOR_VAR_end', text='End')
+		
 
 		button_create_grain.start = context.scene.GRAINCREATOR_VAR_start
 		button_create_grain.end = context.scene.GRAINCREATOR_VAR_end
+
+		row = layout.row()
+		button_purge = row.operator(GRAINCREATOR_OT_clearUnused.bl_idname, text="purge(TEMP)", icon_value=727)
 
 		
 
@@ -181,7 +229,7 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 #--------------------------------------------------------------
 
 classes_interface = (GRAINCREATOR_PT_panelMain,)
-classes_functionality = (GRAINCREATOR_OT_generateGrain, GRAINCREATOR_OT_createNodeGroup)
+classes_functionality = (GRAINCREATOR_OT_generateGrain, GRAINCREATOR_OT_createNodeGroup, GRAINCREATOR_OT_clearUnused)
 
 bpy.types.Scene.GRAINCREATOR_VAR_start = bpy.props.IntProperty(name='GRAINCREATOR_VAR_start', default=1, soft_min=0, description='Frame start for Grain generation.')
 bpy.types.Scene.GRAINCREATOR_VAR_end = bpy.props.IntProperty(name='GRAINCREATOR_VAR_end', default=1, soft_min=0, description='Frame end for Grain generation.')
