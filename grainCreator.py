@@ -76,9 +76,12 @@ def GRAINCREATOR_FN_generateGrain(name):
 	if color_grain:
 		pixels_to_paint[:, :, 0:3] = r[:, :, 0:3]
 	else:
-		pixels_to_paint[:, :, 0:3] = r[:, :, 0:1]
+		pixels_to_paint[:, :, 0:3] = r[:, :, 0:1]	
 
 	pixels_to_paint = np.clip(pixels_to_paint, clip_min, clip_max)
+
+	# Fix Alpha after Clipping (Yikes)
+	pixels_to_paint[:, :, 3] = 1.0
 
 	# ------------------------
 	pixels_to_paint = _convert_matrix_to_pixel_buffer(pixels_to_paint)
@@ -101,18 +104,8 @@ def GRAINCREATOR_FN_contextOverride(area_to_check):
 	return [area for area in bpy.context.screen.areas if area.type == area_to_check][0]
 
 #--------------------------------------------------------------
-# Layer Creation
+# Operators
 #--------------------------------------------------------------	
-
-'''
-1. create image/sequence and load it into a node 
-2. save the image/sequence inside the blend file (maybe... yikes)
-3. alternatively, give user the option to export the grain into a video
-4. and let them sell it :) 
-5. group input -> image node -> mix node -> exposure node -> group output
-                  value node -> math (mult) -----^
-6. DONESKIES 
-'''	
 
 class GRAINCREATOR_OT_generateGrain(bpy.types.Operator):	
 	bl_idname = "graincreator.generate_grain"
@@ -122,7 +115,7 @@ class GRAINCREATOR_OT_generateGrain(bpy.types.Operator):
 
 	start: bpy.props.IntProperty(name='start', default=1)
 	end: bpy.props.IntProperty(name='end', default=1)
-	sequence: bpy.props.BoolProperty(name='sequence', default=False)
+	sequence: bpy.props.BoolProperty(name='sequence', default=True)
 
 	def execute(self, context):
 		# Assert valid frame range.
@@ -136,22 +129,19 @@ class GRAINCREATOR_OT_generateGrain(bpy.types.Operator):
 
 		for i in range(sequence_length):
 			grain = GRAINCREATOR_FN_generateGrain(name=f"grain_{i+1}")
-			if self.sequence:
+			if sequence_length > 1:
 				seq.append(grain)
 
-		if self.sequence:
-			scene = bpy.context.scene
-			compositor_node_tree = scene.node_tree
+		scene = bpy.context.scene 
+		compositor_node_tree = scene.node_tree
+		image_node = compositor_node_tree.nodes.new(type="CompositorNodeImage")
 
-			image_node = compositor_node_tree.nodes.new(type="CompositorNodeImage")
+		if sequence_length == 1:
+			image_node.image = grain
+		if sequence_length > 1: 
 			image_node.image = seq[0]
 			image_node.image.source = 'SEQUENCE'
 			image_node.frame_duration = len(seq)
-
-
-
-
-
 
 		return {'FINISHED'}
 
