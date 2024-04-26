@@ -50,19 +50,22 @@ def _convert_matrix_to_pixel_buffer(buffer):
 
 def GRAINCREATOR_FN_generateGrain(name):
 	w = bpy.data.scenes[0].render.resolution_x
-	h = bpy.data.scenes[0].render.resolution_y
+	h = bpy.data.scenes[0].render.resolution_y	
+
+	clip_min = .4
+	clip_max = .7
 
 	img = bpy.data.images.new(name=name, width=w, height=h)
 	pixels_to_paint = np.ones(4 * w * h, dtype=np.float32)	
 
-	pixels_to_paint = _convert_pixel_buffer_to_matrix(pixels_to_paint, w, h, 4)
+	pixels_to_paint = _convert_pixel_buffer_to_matrix(pixels_to_paint, w, h, 4)	
 
 	# GENERATE NOISE HERE
 	# ------------------------
 
 	color_grain = False
 
-	# Create random values to insert
+	# Editors can calibrate grain size, structure, and texture to achieve the desired effect.
 	r = np.random.rand(*pixels_to_paint.shape)
 
 	if color_grain:
@@ -70,7 +73,7 @@ def GRAINCREATOR_FN_generateGrain(name):
 	else:
 		pixels_to_paint[:, :, 0:3] = r[:, :, 0:1]
 
-	pixels_to_paint = np.clip(pixels_to_paint, 0.6, 0.8)
+	pixels_to_paint = np.clip(pixels_to_paint, clip_min, clip_max)
 
 	# ------------------------
 	pixels_to_paint = _convert_matrix_to_pixel_buffer(pixels_to_paint)
@@ -106,8 +109,19 @@ class GRAINCREATOR_OT_generateGrain(bpy.types.Operator):
 	bl_options = {"REGISTER", "UNDO"}
 	bl_description = "Generates custom film grain image or sequence."
 
+	start: bpy.props.IntProperty(name='start', default=1)
+	end: bpy.props.IntProperty(name='end', default=1)
+
 	def execute(self, context):
-		GRAINCREATOR_FN_generateGrain(name="myCoolGrain")
+		# Assert valid frame range.
+		if self.end < self.start:
+			self.report({"WARNING"}, "Invalid frame range.")	
+			return {'CANCELLED'}
+
+		sequence_length = (self.end - self.start) + 1 if self.end > self.start else 1
+
+		for i in range(sequence_length):
+			GRAINCREATOR_FN_generateGrain(name=f"grain_{i+1}")
 		return {'FINISHED'}
 
 class GRAINCREATOR_OT_createNodeGroup(bpy.types.Operator):
@@ -150,6 +164,14 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 		row = layout.row()
 		button_export_grain = row.operator(GRAINCREATOR_OT_generateGrain.bl_idname, text="Export Grain", icon_value=727)
 
+		# Start & End Frames
+		row = layout.row()
+		row.prop(context.scene, 'GRAINCREATOR_VAR_start', text='Start')
+		row.prop(context.scene, 'GRAINCREATOR_VAR_end', text='End')
+
+		button_create_grain.start = context.scene.GRAINCREATOR_VAR_start
+		button_create_grain.end = context.scene.GRAINCREATOR_VAR_end
+
 		
 
 
@@ -160,6 +182,9 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 
 classes_interface = (GRAINCREATOR_PT_panelMain,)
 classes_functionality = (GRAINCREATOR_OT_generateGrain, GRAINCREATOR_OT_createNodeGroup)
+
+bpy.types.Scene.GRAINCREATOR_VAR_start = bpy.props.IntProperty(name='GRAINCREATOR_VAR_start', default=1, soft_min=0, description='Frame start for Grain generation.')
+bpy.types.Scene.GRAINCREATOR_VAR_end = bpy.props.IntProperty(name='GRAINCREATOR_VAR_end', default=1, soft_min=0, description='Frame end for Grain generation.')
 
 def register():
 
@@ -176,6 +201,9 @@ def unregister():
 		bpy.utils.unregister_class(c)
 	for c in reversed(classes_functionality):
 		bpy.utils.unregister_class(c)
+
+	del bpy.types.Scene.GRAINCREATOR_VAR_start
+	del bpy.types.Scene.GRAINCREATOR_VAR_end
 
 if __name__ == "__main__":
 	register()
