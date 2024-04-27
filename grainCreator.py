@@ -20,17 +20,10 @@ bl_info = {
 import os
 import bpy
 import bpy_extras
-import cv2
 import numpy as np
 from bpy.props import PointerProperty, BoolProperty
-import math 
-import random
-from mathutils import Vector
-import mathutils
 from bpy_extras.image_utils import load_image
 from pathlib import Path
-import shutil
-from bpy_extras import view3d_utils
 from bpy_extras.io_utils import ImportHelper
 import time, sys
 
@@ -48,21 +41,25 @@ def _convert_matrix_to_pixel_buffer(buffer):
 	buffer = buffer.flatten()
 	return buffer		
 
+''
+def _filter_gaussian(l=3, sig=1.0):
+	ax = np.linspace(-(l-1) / 2.0, (l-1) /2.0, l)
+	gaussian = np.exp(-0.5 * np.square(ax) / np.square(sig))
+	kernel = np.outer(gaussian, gaussian)
+	return kernel / np.sum(kernel)
+
 def GRAINCREATOR_FN_generateGrain(name):
 	w = bpy.data.scenes[0].render.resolution_x
 	h = bpy.data.scenes[0].render.resolution_y	
+	buffer_size = (4 * w * h)
 
 	clip_min = .4
 	clip_max = .7
 
 	# KEEP ME
 	img = bpy.data.images.new(name=name, width=w, height=h)
-
-	# test sequence
-	#seq = bpy.data.images.new(name='mySeq', width=w, height=h)
-	#seq.source = 'SEQUENCE'
-
-	pixels_to_paint = np.ones(4 * w * h, dtype=np.float32)	
+	
+	pixels_to_paint = np.ones(buffer_size, dtype=np.float32)	
 	pixels_to_paint = _convert_pixel_buffer_to_matrix(pixels_to_paint, w, h, 4)	
 
 	# GENERATE NOISE HERE
@@ -80,12 +77,19 @@ def GRAINCREATOR_FN_generateGrain(name):
 
 	pixels_to_paint = np.clip(pixels_to_paint, clip_min, clip_max)
 
-	# Fix Alpha after Clipping (Yikes)
-	pixels_to_paint[:, :, 3] = 1.0
+	# Apply Gaussian Blur
+	kernel = _filter_gaussian()
+	blur_result = np.convolve(pixels_to_paint.flatten(), kernel.flatten())
+
+	pixels = blur_result[:buffer_size].reshape(pixels_to_paint.shape)
+	pixelsf32 = pixels.astype(np.float32)
+
+	# Fix Alpha to 1.0
+	pixelsf32[:, :, 3] = 1.0
 
 	# ------------------------
-	pixels_to_paint = _convert_matrix_to_pixel_buffer(pixels_to_paint)
-	img.pixels.foreach_set(pixels_to_paint)
+	output = _convert_matrix_to_pixel_buffer(pixelsf32)
+	img.pixels.foreach_set(output)
 	img.pack()
 	img.update()	
 
@@ -138,11 +142,12 @@ class GRAINCREATOR_OT_generateGrain(bpy.types.Operator):
 
 		if sequence_length == 1:
 			image_node.image = grain
-		if sequence_length > 1: 
-			image_node.image = seq[0]
-			image_node.image.source = 'SEQUENCE'
-			image_node.frame_duration = len(seq)
-
+		if sequence_length > 1: 		
+			image_node.image = seq[0]		
+			# when changing to SEQUENCE, blender is unable to "load" the image	
+			#image_node.image.source = 'SEQUENCE'
+			#image_node.frame_duration = len(seq)
+			
 		return {'FINISHED'}
 
 class GRAINCREATOR_OT_createNodeGroup(bpy.types.Operator):
