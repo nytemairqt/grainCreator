@@ -48,22 +48,19 @@ def _filter_gaussian(k=3, sig=1.0):
 	kernel = np.outer(gaussian, gaussian)
 	return kernel / np.sum(kernel)
 
-def GRAINCREATOR_FN_generateGrain(name, clip_min=.4, clip_max=.7, k=3, sigma=1.0, oversampling=False, monochromatic=True):
+def GRAINCREATOR_FN_generateGrain(name, clip_min=.4, clip_max=.7, k=3, sigma=1.0, oversampling=False, monochromatic=True):	
 	w = bpy.data.scenes[0].render.resolution_x if not oversampling else (bpy.data.scenes[0].render.resolution_x * 2)
 	h = bpy.data.scenes[0].render.resolution_y if not oversampling else (bpy.data.scenes[0].render.resolution_y * 2)
 	buffer_size = (4 * w * h)
 
-	# KEEP ME
-	img = bpy.data.images.new(name=name, width=w, height=h)
+	# Create Blank Image
+	grain = bpy.data.images.new(name=name, width=w, height=h)
 	
+	# Convert Pixel Buffer to Matrix
 	pixels_to_paint = np.ones(buffer_size, dtype=np.float32)	
 	pixels_to_paint = _convert_pixel_buffer_to_matrix(pixels_to_paint, w, h, 4)	
 
-	# GENERATE NOISE HERE
-	# ------------------------
-
-	color_grain = False
-
+	# Generate Grain
 	r = np.random.rand(*pixels_to_paint.shape)
 
 	if monochromatic:
@@ -71,30 +68,41 @@ def GRAINCREATOR_FN_generateGrain(name, clip_min=.4, clip_max=.7, k=3, sigma=1.0
 	else:
 		pixels_to_paint[:, :, 0:3] = r[:, :, 0:3]		
 
+	# Clip Values
 	pixels_to_paint = np.clip(pixels_to_paint, clip_min, clip_max)
 
 	# Apply Gaussian Blur
 	kernel = _filter_gaussian(k=k, sig=sigma)
 	blur_result = np.convolve(pixels_to_paint.flatten(), kernel.flatten())
-
 	pixels = blur_result[:buffer_size].reshape(pixels_to_paint.shape)
-	pixelsf32 = pixels.astype(np.float32)
+	pixels_f32 = pixels.astype(np.float32)
 
 	# Fix Alpha to 1.0
-	pixelsf32[:, :, 3] = 1.0
+	pixels_f32[:, :, 3] = 1.0
+	
+	# Propagate Grain to Empty Image
+	output = _convert_matrix_to_pixel_buffer(pixels_f32)
+	grain.pixels.foreach_set(output)
+	grain.pack()
+	grain.update()	
 
-	# ------------------------
-	output = _convert_matrix_to_pixel_buffer(pixelsf32)
-	img.pixels.foreach_set(output)
-	img.pack()
-	img.update()	
-
-	# Show generated grain in Image Editor 
+	# Show Result in Image Editor 
 	for area in bpy.context.screen.areas:
 		if area.type == 'IMAGE_EDITOR':
-			area.spaces.active.image = img
+			area.spaces.active.image = grain
 
-	return img
+	return grain
+
+def GRAINCREATOR_FN_exportFrame(image, idx, dir):
+	name = idx
+	if idx < 10:
+		name = f'000{idx}'
+	if idx >= 10 and idx < 100:
+		name = f'00{idx}'
+	if idx >= 100 and idx < 1000:
+		name = f'0{idx}'
+	image.filepath_raw = f'{dir}{name}.png'
+	image.save()
 
 def GRAINCREATOR_FN_addNodeGroupToCompositor():
 	# just create a node group & add it to compositor, user can plug the shit in manually 
@@ -119,47 +127,56 @@ class GRAINCREATOR_OT_generateGrain(bpy.types.Operator):
 	sigma: bpy.props.FloatProperty(name='sigma', default=1.0)
 	oversampling: bpy.props.BoolProperty(name='oversampling', default=False)
 	monochromatic: bpy.props.BoolProperty(name='monochromatic', default=False)
-	start: bpy.props.IntProperty(name='start', default=1)
-	end: bpy.props.IntProperty(name='end', default=1)
-	sequence: bpy.props.BoolProperty(name='sequence', default=True)
 
 	def execute(self, context):
-		# Assert valid frame range.
-		if self.end < self.start:
-			self.report({"WARNING"}, "Invalid frame range.")	
-			return {'CANCELLED'}
+		# Assert valid Clipping
+		if self.clip_max < self.clip_min:
+			self.report({"WARNING"}, "Invalid clip range.")
+			return{'CANCELLED'}
 
-		sequence_length = (self.end - self.start) + 1 if self.end > self.start else 1
+		# Generate single frame for previewing.
+		grain = GRAINCREATOR_FN_generateGrain(
+			name=f"grainSingleFrame", 
+			clip_min=self.clip_min, 
+			clip_max=self.clip_max, 
+			k=self.kernel_size, 
+			sigma=self.sigma,
+			oversampling=self.oversampling,
+			monochromatic=self.monochromatic)			
+		return {'FINISHED'}
 
-		seq = []
+class GRAINCREATOR_OT_exportGrainFrames(bpy.types.Operator):	
+	bl_idname = "graincreator.export_grain_frames"
+	bl_label = "Exports grain sequence to output folder."
+	bl_options = {"REGISTER", "UNDO"}
+	bl_description = "Exports grain sequence to output folder."
 
-		for i in range(sequence_length):
+	clip_min: bpy.props.FloatProperty(name='clip_min', default=.4)
+	clip_max: bpy.props.FloatProperty(name='clip_max', default=.7)
+	kernel_size: bpy.props.IntProperty(name='kernel_size', default=3)
+	sigma: bpy.props.FloatProperty(name='sigma', default=1.0)
+	oversampling: bpy.props.BoolProperty(name='oversampling', default=False)
+	monochromatic: bpy.props.BoolProperty(name='monochromatic', default=False)
+	frames: bpy.props.IntProperty(name='frames', default=1)
+
+	def execute(self, context):
+		# Assert valid Clipping
+		if self.clip_max < self.clip_min:
+			self.report({"WARNING"}, "Invalid clip range.")
+			return{'CANCELLED'}
+
+		# Export grain frames.
+		for i in range(self.frames):			
 			grain = GRAINCREATOR_FN_generateGrain(
-				name=f"grain_{i+1}", 
+				name=f"{i+1}", # change to 001, 002 etc
 				clip_min=self.clip_min, 
 				clip_max=self.clip_max, 
 				k=self.kernel_size, 
 				sigma=self.sigma,
 				oversampling=self.oversampling,
-				monochromatic=self.monochromatic)
-			if sequence_length > 1:
-				seq.append(grain)
-
-		'''
-		scene = bpy.context.scene 
-		compositor_node_tree = scene.node_tree
-		image_node = compositor_node_tree.nodes.new(type="CompositorNodeImage")
-
-		if sequence_length == 1:
-			image_node.image = grain
-		if sequence_length > 1: 		
-			image_node.image = seq[0]		
-			# when changing to SEQUENCE, blender is unable to "load" the image	
-			#image_node.image.source = 'SEQUENCE'
-			#image_node.frame_duration = len(seq)
-		'''
-			
-		return {'FINISHED'}
+				monochromatic=self.monochromatic)		
+			GRAINCREATOR_FN_exportFrame(grain, i+1, "D:/Documents/Scenefiller/grainCreator/output/")
+		return {'FINISHED'}		
 
 class GRAINCREATOR_OT_createNodeGroup(bpy.types.Operator):
 	bl_idname = "graincreator.create_node_group"
@@ -203,13 +220,12 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 		view = context.space_data
 		scene = context.scene
 
-		#==============
-		# ADD OVERSAMPLING OPTION TO 2X SCENE RESOLUTION FOR GRAIN
-		#==============
+		# Output 
+		row = layout.row()
+		row.label(text='Grain Generation', icon='REMOVE')	
 
 		# Grain Settings
 		row = layout.row()
-		# need to set min/max's for these so people don't break shit
 		row.prop(context.scene, 'GRAINCREATOR_VAR_clip_min', text='Clip Min')
 		row.prop(context.scene, 'GRAINCREATOR_VAR_clip_max', text='Clip Max')
 		row = layout.row()
@@ -220,21 +236,39 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 		row = layout.row()
 		row.prop(context.scene, 'GRAINCREATOR_VAR_monochromatic', text='Monochromatic')
 
-		# Start & End Frames
-		row = layout.row()
-		row.prop(context.scene, 'GRAINCREATOR_VAR_start', text='Start')
-		row.prop(context.scene, 'GRAINCREATOR_VAR_end', text='End')
+		
 
 		# Create Grain
 		row = layout.row()
 		button_create_grain = row.operator(GRAINCREATOR_OT_generateGrain.bl_idname, text="Create Grain", icon="FILE_IMAGE")
 	
-		# Save Grain 
-		row = layout.row()
-		button_export_grain = row.operator(GRAINCREATOR_OT_generateGrain.bl_idname, text="Export Grain", icon_value=727)
-
 		row = layout.row()
 		button_purge = row.operator(GRAINCREATOR_OT_clearUnused.bl_idname, text="purge(TEMP)", icon_value=727)
+
+		########################
+		# need to add grain preview image here.
+		########################
+
+		# Output 
+		row = layout.row()
+		row.label(text='Output', icon='REMOVE')	
+
+		# Output Directory
+		row = layout.row()
+		row.label(text='Output Folder: ')
+		row = layout.row()
+		row.prop(context.scene, 'MATTECREATOR_VAR_outputDir')
+
+		# Frame Count
+		row = layout.row()
+		row.prop(context.scene, 'GRAINCREATOR_VAR_frames', text='Frames')
+
+		# Save Grain 
+		################
+		# need to setup some sort of tqdm to track num frames remaining (maybe just a label)
+		################
+		row = layout.row()
+		button_export_grain = row.operator(GRAINCREATOR_OT_exportGrainFrames.bl_idname, text="Export Grain", icon_value=727)
 
 		# Assign Variables
 		button_create_grain.clip_min = context.scene.GRAINCREATOR_VAR_clip_min
@@ -243,19 +277,21 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 		button_create_grain.sigma = context.scene.GRAINCREATOR_VAR_sigma		
 		button_create_grain.oversampling = context.scene.GRAINCREATOR_VAR_oversampling
 		button_create_grain.monochromatic = context.scene.GRAINCREATOR_VAR_monochromatic
-		button_create_grain.start = context.scene.GRAINCREATOR_VAR_start
-		button_create_grain.end = context.scene.GRAINCREATOR_VAR_end
 
-		
-
-
+		button_export_grain.clip_min = context.scene.GRAINCREATOR_VAR_clip_min
+		button_export_grain.clip_max = context.scene.GRAINCREATOR_VAR_clip_max
+		button_export_grain.kernel_size = context.scene.GRAINCREATOR_VAR_kernel
+		button_export_grain.sigma = context.scene.GRAINCREATOR_VAR_sigma		
+		button_export_grain.oversampling = context.scene.GRAINCREATOR_VAR_oversampling
+		button_export_grain.monochromatic = context.scene.GRAINCREATOR_VAR_monochromatic
+		button_export_grain.frames = context.scene.GRAINCREATOR_VAR_frames
 
 #--------------------------------------------------------------
 # Register 
 #--------------------------------------------------------------
 
 classes_interface = (GRAINCREATOR_PT_panelMain,)
-classes_functionality = (GRAINCREATOR_OT_generateGrain, GRAINCREATOR_OT_createNodeGroup, GRAINCREATOR_OT_clearUnused)
+classes_functionality = (GRAINCREATOR_OT_generateGrain, GRAINCREATOR_OT_exportGrainFrames, GRAINCREATOR_OT_createNodeGroup, GRAINCREATOR_OT_clearUnused)
 
 bpy.types.Scene.GRAINCREATOR_VAR_clip_min = bpy.props.FloatProperty(name='GRAINCREATOR_VAR_clip_min', default=.4, soft_min=0.0, soft_max=1.0, description='Squash Black Values in Generated Grain.')
 bpy.types.Scene.GRAINCREATOR_VAR_clip_max = bpy.props.FloatProperty(name='GRAINCREATOR_VAR_clip_max', default=.7, soft_min=0.0, soft_max=1.0, description='Squash White Values in Generated Grain.')
@@ -263,8 +299,9 @@ bpy.types.Scene.GRAINCREATOR_VAR_kernel = bpy.props.IntProperty(name='GRAINCREAT
 bpy.types.Scene.GRAINCREATOR_VAR_sigma = bpy.props.FloatProperty(name='GRAINCREATOR_VAR_sigma', default=1.0, soft_min=0.0, soft_max=5.0, description='Set Sigma for Gaussian Blur.')
 bpy.types.Scene.GRAINCREATOR_VAR_oversampling = bpy.props.BoolProperty(name='GRAINCREATOR_VAR_oversampling', default=False)
 bpy.types.Scene.GRAINCREATOR_VAR_monochromatic = bpy.props.BoolProperty(name='GRAINCREATOR_VAR_monochromatic', default=True)
-bpy.types.Scene.GRAINCREATOR_VAR_start = bpy.props.IntProperty(name='GRAINCREATOR_VAR_start', default=1, soft_min=0, description='Frame start for Grain generation.')
-bpy.types.Scene.GRAINCREATOR_VAR_end = bpy.props.IntProperty(name='GRAINCREATOR_VAR_end', default=1, soft_min=0, description='Frame end for Grain generation.')
+bpy.types.Scene.GRAINCREATOR_VAR_frames = bpy.props.IntProperty(name='GRAINCREATOR_VAR_frames', default=1, soft_min=1, description='Number of frames to export.')
+bpy.types.Scene.GRAINCREATOR_VAR_outputDir = bpy.props.StringProperty(name='', default='', subtype='DIR_PATH')
+
 
 def register():
 
@@ -288,9 +325,8 @@ def unregister():
 	del bpy.types.Scene.GRAINCREATOR_VAR_sigma	
 	del bpy.types.Scene.GRAINCREATOR_VAR_oversampling 
 	del bpy.types.Scene.GRAINCREATOR_VAR_monochromatic	
-
-	del bpy.types.Scene.GRAINCREATOR_VAR_start
-	del bpy.types.Scene.GRAINCREATOR_VAR_end
+	del bpy.types.Scene.GRAINCREATOR_VAR_frames
+	del bpy.types.Scene.GRAINCREATOR_VAR_outputDir
 
 if __name__ == "__main__":
 	register()
