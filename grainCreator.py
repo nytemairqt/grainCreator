@@ -48,9 +48,9 @@ def _filter_gaussian(k=3, sig=1.0):
 	kernel = np.outer(gaussian, gaussian)
 	return kernel / np.sum(kernel)
 
-def GRAINCREATOR_FN_generateGrain(name, clip_min=.4, clip_max=.7, k=3, sigma=1.0):
-	w = bpy.data.scenes[0].render.resolution_x
-	h = bpy.data.scenes[0].render.resolution_y	
+def GRAINCREATOR_FN_generateGrain(name, clip_min=.4, clip_max=.7, k=3, sigma=1.0, oversampling=False, monochromatic=True):
+	w = bpy.data.scenes[0].render.resolution_x if not oversampling else (bpy.data.scenes[0].render.resolution_x * 2)
+	h = bpy.data.scenes[0].render.resolution_y if not oversampling else (bpy.data.scenes[0].render.resolution_y * 2)
 	buffer_size = (4 * w * h)
 
 	# KEEP ME
@@ -64,19 +64,12 @@ def GRAINCREATOR_FN_generateGrain(name, clip_min=.4, clip_max=.7, k=3, sigma=1.0
 
 	color_grain = False
 
-	# Editors can calibrate grain size, structure, and texture to achieve the desired effect.
 	r = np.random.rand(*pixels_to_paint.shape)
 
-	if color_grain:
-		pixels_to_paint[:, :, 0:3] = r[:, :, 0:3]
-	else:
+	if monochromatic:
 		pixels_to_paint[:, :, 0:3] = r[:, :, 0:1]	
-
-	print('==================================================')
-	print('==================================================')
-	print(clip_min, clip_max)
-	print('==================================================')
-	print('==================================================')
+	else:
+		pixels_to_paint[:, :, 0:3] = r[:, :, 0:3]		
 
 	pixels_to_paint = np.clip(pixels_to_paint, clip_min, clip_max)
 
@@ -124,6 +117,8 @@ class GRAINCREATOR_OT_generateGrain(bpy.types.Operator):
 	clip_max: bpy.props.FloatProperty(name='clip_max', default=.7)
 	kernel_size: bpy.props.IntProperty(name='kernel_size', default=3)
 	sigma: bpy.props.FloatProperty(name='sigma', default=1.0)
+	oversampling: bpy.props.BoolProperty(name='oversampling', default=False)
+	monochromatic: bpy.props.BoolProperty(name='monochromatic', default=False)
 	start: bpy.props.IntProperty(name='start', default=1)
 	end: bpy.props.IntProperty(name='end', default=1)
 	sequence: bpy.props.BoolProperty(name='sequence', default=True)
@@ -144,7 +139,9 @@ class GRAINCREATOR_OT_generateGrain(bpy.types.Operator):
 				clip_min=self.clip_min, 
 				clip_max=self.clip_max, 
 				k=self.kernel_size, 
-				sigma=self.sigma)
+				sigma=self.sigma,
+				oversampling=self.oversampling,
+				monochromatic=self.monochromatic)
 			if sequence_length > 1:
 				seq.append(grain)
 
@@ -206,6 +203,10 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 		view = context.space_data
 		scene = context.scene
 
+		#==============
+		# ADD OVERSAMPLING OPTION TO 2X SCENE RESOLUTION FOR GRAIN
+		#==============
+
 		# Grain Settings
 		row = layout.row()
 		# need to set min/max's for these so people don't break shit
@@ -214,6 +215,10 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 		row = layout.row()
 		row.prop(context.scene, 'GRAINCREATOR_VAR_kernel', text='Kernel')
 		row.prop(context.scene, 'GRAINCREATOR_VAR_sigma', text='Sigma')
+		row = layout.row()
+		row.prop(context.scene, 'GRAINCREATOR_VAR_oversampling', text='Oversampling')
+		row = layout.row()
+		row.prop(context.scene, 'GRAINCREATOR_VAR_monochromatic', text='Monochromatic')
 
 		# Start & End Frames
 		row = layout.row()
@@ -236,6 +241,8 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 		button_create_grain.clip_max = context.scene.GRAINCREATOR_VAR_clip_max
 		button_create_grain.kernel_size = context.scene.GRAINCREATOR_VAR_kernel
 		button_create_grain.sigma = context.scene.GRAINCREATOR_VAR_sigma		
+		button_create_grain.oversampling = context.scene.GRAINCREATOR_VAR_oversampling
+		button_create_grain.monochromatic = context.scene.GRAINCREATOR_VAR_monochromatic
 		button_create_grain.start = context.scene.GRAINCREATOR_VAR_start
 		button_create_grain.end = context.scene.GRAINCREATOR_VAR_end
 
@@ -254,6 +261,8 @@ bpy.types.Scene.GRAINCREATOR_VAR_clip_min = bpy.props.FloatProperty(name='GRAINC
 bpy.types.Scene.GRAINCREATOR_VAR_clip_max = bpy.props.FloatProperty(name='GRAINCREATOR_VAR_clip_max', default=.7, soft_min=0.0, soft_max=1.0, description='Squash White Values in Generated Grain.')
 bpy.types.Scene.GRAINCREATOR_VAR_kernel = bpy.props.IntProperty(name='GRAINCREATOR_VAR_kernel', default=3, soft_min=1, soft_max=16, description='Set Kernel Size for Gaussian Blur.')
 bpy.types.Scene.GRAINCREATOR_VAR_sigma = bpy.props.FloatProperty(name='GRAINCREATOR_VAR_sigma', default=1.0, soft_min=0.0, soft_max=5.0, description='Set Sigma for Gaussian Blur.')
+bpy.types.Scene.GRAINCREATOR_VAR_oversampling = bpy.props.BoolProperty(name='GRAINCREATOR_VAR_oversampling', default=False)
+bpy.types.Scene.GRAINCREATOR_VAR_monochromatic = bpy.props.BoolProperty(name='GRAINCREATOR_VAR_monochromatic', default=True)
 bpy.types.Scene.GRAINCREATOR_VAR_start = bpy.props.IntProperty(name='GRAINCREATOR_VAR_start', default=1, soft_min=0, description='Frame start for Grain generation.')
 bpy.types.Scene.GRAINCREATOR_VAR_end = bpy.props.IntProperty(name='GRAINCREATOR_VAR_end', default=1, soft_min=0, description='Frame end for Grain generation.')
 
@@ -276,7 +285,9 @@ def unregister():
 	del bpy.types.Scene.GRAINCREATOR_VAR_clip_min
 	del bpy.types.Scene.GRAINCREATOR_VAR_clip_max
 	del bpy.types.Scene.GRAINCREATOR_VAR_kernel
-	del bpy.types.Scene.GRAINCREATOR_VAR_sigma		
+	del bpy.types.Scene.GRAINCREATOR_VAR_sigma	
+	del bpy.types.Scene.GRAINCREATOR_VAR_oversampling 
+	del bpy.types.Scene.GRAINCREATOR_VAR_monochromatic	
 
 	del bpy.types.Scene.GRAINCREATOR_VAR_start
 	del bpy.types.Scene.GRAINCREATOR_VAR_end
