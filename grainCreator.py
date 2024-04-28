@@ -26,6 +26,7 @@ from bpy_extras.image_utils import load_image
 from pathlib import Path
 from bpy_extras.io_utils import ImportHelper
 import time, sys
+from functools import partial 
 
 #--------------------------------------------------------------
 # Miscellaneous Functions
@@ -82,8 +83,7 @@ def GRAINCREATOR_FN_generateGrain(name, clip_min=.4, clip_max=.7, k=3, sigma=1.0
 	
 	# Propagate Grain to Empty Image
 	output = _convert_matrix_to_pixel_buffer(pixels_f32)
-	grain.pixels.foreach_set(output)
-	grain.pack()
+	grain.pixels.foreach_set(output)	
 	grain.update()	
 
 	# Show Result in Image Editor 
@@ -111,9 +111,42 @@ def GRAINCREATOR_FN_addNodeGroupToCompositor():
 def GRAINCREATOR_FN_contextOverride(area_to_check):
 	return [area for area in bpy.context.screen.areas if area.type == area_to_check][0]
 
+def GRAINCREATOR_FN_refreshUI():
+	for region in bpy.context.area.regions:
+		if region.type == 'UI':
+			region.tag_redraw()
+	return None 
+	'''
+	for area in bpy.context.screen.areas:
+		for region in area.regions:
+			if region.type == "UI":
+				region.tag_redraw()
+	'''
+
 #--------------------------------------------------------------
 # Operators
 #--------------------------------------------------------------	
+
+class GRAINCREATOR_OT_Timer(bpy.types.Operator):
+	bl_idname = "graincreator.timer"
+	bl_label = "Timer Object"
+
+	_timer = None
+
+	def modal(self, context, event):
+		GRAINCREATOR_FN_refreshUI()
+		#[a.tag_redraw() for a in context.screen.areas]
+		if self._timer.time_duration > 3:
+			context.window_manager.progress = 1
+			return {'FINISHED'}
+		context.window_manager.progress = self._timer.time_duration / 3
+		return {'PASS_THROUGH'}
+
+	def execute(self, context):
+		wm = context.window_manager
+		self._timer = wm.event_timer_add(0.1, window=context.window)
+		wm.modal_handler_add(self)
+		return {'RUNNING_MODAL'}
 
 class GRAINCREATOR_OT_generateGrain(bpy.types.Operator):	
 	bl_idname = "graincreator.generate_grain"
@@ -165,10 +198,13 @@ class GRAINCREATOR_OT_exportGrainFrames(bpy.types.Operator):
 			self.report({"WARNING"}, "Invalid clip range.")
 			return{'CANCELLED'}
 
-		# Export grain frames.
-		for i in range(self.frames):			
+		# Export grain frames.	
+		bpy.ops.wm.console_toggle()
+		print('Writing Frames...')
+		for i in range(self.frames):
+			print(f'{i}/{self.frames}')
 			grain = GRAINCREATOR_FN_generateGrain(
-				name=f"{i+1}", # change to 001, 002 etc
+				name=f"{i+1}",
 				clip_min=self.clip_min, 
 				clip_max=self.clip_max, 
 				k=self.kernel_size, 
@@ -176,6 +212,8 @@ class GRAINCREATOR_OT_exportGrainFrames(bpy.types.Operator):
 				oversampling=self.oversampling,
 				monochromatic=self.monochromatic)		
 			GRAINCREATOR_FN_exportFrame(grain, i+1, "D:/Documents/Scenefiller/grainCreator/output/")
+		print('Finishing up...')
+		bpy.ops.wm.console_toggle()
 		return {'FINISHED'}		
 
 class GRAINCREATOR_OT_createNodeGroup(bpy.types.Operator):
@@ -235,9 +273,7 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 		row.prop(context.scene, 'GRAINCREATOR_VAR_oversampling', text='Oversampling')
 		row = layout.row()
 		row.prop(context.scene, 'GRAINCREATOR_VAR_monochromatic', text='Monochromatic')
-
 		
-
 		# Create Grain
 		row = layout.row()
 		button_create_grain = row.operator(GRAINCREATOR_OT_generateGrain.bl_idname, text="Create Grain", icon="FILE_IMAGE")
@@ -257,18 +293,15 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 		row = layout.row()
 		row.label(text='Output Folder: ')
 		row = layout.row()
-		row.prop(context.scene, 'MATTECREATOR_VAR_outputDir')
+		row.prop(scene, 'MATTECREATOR_VAR_outputDir')
 
 		# Frame Count
 		row = layout.row()
-		row.prop(context.scene, 'GRAINCREATOR_VAR_frames', text='Frames')
+		row.prop(scene, 'GRAINCREATOR_VAR_frames', text='Frames')
 
 		# Save Grain 
-		################
-		# need to setup some sort of tqdm to track num frames remaining (maybe just a label)
-		################
 		row = layout.row()
-		button_export_grain = row.operator(GRAINCREATOR_OT_exportGrainFrames.bl_idname, text="Export Grain", icon_value=727)
+		button_export_grain = row.operator(GRAINCREATOR_OT_exportGrainFrames.bl_idname, text='Export Frames', icon_value=727)	
 
 		# Assign Variables
 		button_create_grain.clip_min = context.scene.GRAINCREATOR_VAR_clip_min
@@ -286,6 +319,7 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 		button_export_grain.monochromatic = context.scene.GRAINCREATOR_VAR_monochromatic
 		button_export_grain.frames = context.scene.GRAINCREATOR_VAR_frames
 
+
 #--------------------------------------------------------------
 # Register 
 #--------------------------------------------------------------
@@ -301,7 +335,6 @@ bpy.types.Scene.GRAINCREATOR_VAR_oversampling = bpy.props.BoolProperty(name='GRA
 bpy.types.Scene.GRAINCREATOR_VAR_monochromatic = bpy.props.BoolProperty(name='GRAINCREATOR_VAR_monochromatic', default=True)
 bpy.types.Scene.GRAINCREATOR_VAR_frames = bpy.props.IntProperty(name='GRAINCREATOR_VAR_frames', default=1, soft_min=1, description='Number of frames to export.')
 bpy.types.Scene.GRAINCREATOR_VAR_outputDir = bpy.props.StringProperty(name='', default='', subtype='DIR_PATH')
-
 
 def register():
 
