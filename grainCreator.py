@@ -102,8 +102,30 @@ def GRAINCREATOR_FN_exportFrame(image, idx, folder):
 	image.filepath_raw = f'{folder}{name}.png'
 	image.save()
 
-def GRAINCREATOR_FN_addNodeGroupToCompositor():
-	# just create a node group & add it to compositor, user can plug the shit in manually 
+def GRAINCREATOR_FN_compositeGrain(folder, sequence=False):
+	bpy.context.scene.use_nodes = True 
+	tree = bpy.context.scene.node_tree 
+	nodes = tree.nodes
+
+	grain = nodes.new(type='CompositorNodeImage')
+	grain.image = None if sequence else folder # FIX LATER	
+	mix_grain = nodes.new(type='CompositorNodeMixRGB')
+	mix_grain.name = 'Overlay'
+	mix_grain.blend_type = 'OVERLAY'
+
+	mix_superimpose = nodes.new(type='CompositorNodeMixRGB')
+	mix_superimpose.name = 'SuperImposeGrain'
+	mix_superimpose.blend_type = 'OVERLAY' # Try different blend modes for superimposition
+
+	exposure = nodes.new(type='CompositorNodeExposure')
+	exp_math = nodes.new(type='CompositorNodeMath')
+	exp_math.operation = 'MULTIPLY'
+	grain_strength = nodes.new(type='CompositorNodeValue')
+	# IN DEHANCER -- THE ORIGINAL IMAGE IS SUPERIMPOSED BACK ONTO THE GRAIN FOR MORE REALISM 
+	# https://youtu.be/Vv7lB7n1Fak?t=369
+	# try different blending modes for super-imposition
+	# dehancer allows you to set the grain strength for shadows, midtones and highlights separately
+
 	return 
 
 #--------------------------------------------------------------
@@ -178,13 +200,16 @@ class GRAINCREATOR_OT_exportGrainFrames(bpy.types.Operator):
 		bpy.ops.wm.console_toggle()
 		return {'FINISHED'}		
 
-class GRAINCREATOR_OT_createNodeGroup(bpy.types.Operator):
-	bl_idname = "graincreator.create_node_group"
-	bl_label = "Film Grain node."
-	bl_options = {"REGISTER", "UNDO"}
-	bl_description = "Film Grain node."
+class GRAINCREATOR_OT_compositeGrain(bpy.types.Operator):
+	bl_idname = 'graincreator.composite_grain'
+	bl_label = 'Composite Grain'
+	bl_options = {'REGISTER', 'UNDO'}
+	bl_description = 'Composite Grain'
+
+	file: bpy.props.StringProperty(name='', default='')
 
 	def execute(self, context):
+		GRAINCREATOR_FN_compositeGrain(self.file)
 		return{'FINISHED'}
 
 ############# TEMP
@@ -252,6 +277,10 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 		row = layout.row()
 		button_export_grain = row.operator(GRAINCREATOR_OT_exportGrainFrames.bl_idname, text='Export Frames', icon_value=727)	
 
+		# Composite Grain
+		row = layout.row()
+		button_composite_grain = row.operator(GRAINCREATOR_OT_compositeGrain.bl_idname, text='Composite Grain', icon="FILE_IMAGE")
+
 		# Assign Variables
 		button_create_grain.clip_min = context.scene.GRAINCREATOR_VAR_clip_min
 		button_create_grain.clip_max = context.scene.GRAINCREATOR_VAR_clip_max
@@ -274,7 +303,7 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 #--------------------------------------------------------------
 
 classes_interface = (GRAINCREATOR_PT_panelMain,)
-classes_functionality = (GRAINCREATOR_OT_generateGrain, GRAINCREATOR_OT_exportGrainFrames, GRAINCREATOR_OT_createNodeGroup, GRAINCREATOR_OT_clearUnused)
+classes_functionality = (GRAINCREATOR_OT_generateGrain, GRAINCREATOR_OT_exportGrainFrames, GRAINCREATOR_OT_compositeGrain, GRAINCREATOR_OT_clearUnused)
 
 bpy.types.Scene.GRAINCREATOR_VAR_clip_min = bpy.props.FloatProperty(name='GRAINCREATOR_VAR_clip_min', default=.5, soft_min=0.0, soft_max=1.0, description='Squash Black Values in Generated Grain.')
 bpy.types.Scene.GRAINCREATOR_VAR_clip_max = bpy.props.FloatProperty(name='GRAINCREATOR_VAR_clip_max', default=.6, soft_min=0.0, soft_max=1.0, description='Squash White Values in Generated Grain.')
