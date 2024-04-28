@@ -102,29 +102,104 @@ def GRAINCREATOR_FN_exportFrame(image, idx, folder):
 	image.filepath_raw = f'{folder}{name}.png'
 	image.save()
 
-def GRAINCREATOR_FN_compositeGrain(folder, sequence=False):
+
+def GRAINCREATOR_FN_compositeGrain(self, folder):
 	bpy.context.scene.use_nodes = True 
 	tree = bpy.context.scene.node_tree 
 	nodes = tree.nodes
 
+	frames = list()
+
+	for file_name in os.listdir(folder):
+		if file_name.endswith('.png'):
+			frames.append(file_name)
+
+	num_frames = len(frames)
+
+	if num_frames < 1:
+		self.report({'WARNING'}, 'No viable frames found.')
+		return{'CANCELLED'}
+
+	path = f'{folder}0001.png'
+	grain_image = bpy.data.images.load(path)
+	grain_image.source = 'SEQUENCE'
+
+	composite_tree = bpy.data.node_groups.new('GrainComposite', 'CompositorNodeTree')
+	tree = composite_tree
+	nodes = composite_tree.nodes
+	links = tree.links
+
+	# Create Nodes
+
+	comp_input = nodes.new('NodeGroupInput')	
+	comp_input.location = (-500, 0)	
+	
+	comp_output = nodes.new('NodeGroupOutput')
+	comp_output.location = (500, 0)
+	
 	grain = nodes.new(type='CompositorNodeImage')
-	grain.image = None if sequence else folder # FIX LATER	
+	grain.label = 'Grain'
+	grain.location = (-700, -150)
+	grain.image = grain_image
+	grain.frame_duration = num_frames
+	grain.use_cyclic = True
+
+	grain_scale = nodes.new(type='CompositorNodeScale')
+	grain_scale.location = (-500, -200)
+
 	mix_grain = nodes.new(type='CompositorNodeMixRGB')
 	mix_grain.name = 'Overlay'
+	mix_grain.label = 'Grain Blend'
 	mix_grain.blend_type = 'OVERLAY'
+	mix_grain.location = (-150, 0)
 
 	mix_superimpose = nodes.new(type='CompositorNodeMixRGB')
 	mix_superimpose.name = 'SuperImposeGrain'
-	mix_superimpose.blend_type = 'OVERLAY' # Try different blend modes for superimposition
+	mix_superimpose.label = 'Super-Impose'
+	mix_superimpose.blend_type = 'ADD'
+	mix_superimpose.location = (-500, -400)
 
 	exposure = nodes.new(type='CompositorNodeExposure')
+	exposure.location = (150, 0)
 	exp_math = nodes.new(type='CompositorNodeMath')
+	exp_math.label = 'Exposure Mul'
+	exp_math.location = (-150, -300)
 	exp_math.operation = 'MULTIPLY'
-	grain_strength = nodes.new(type='CompositorNodeValue')
-	# IN DEHANCER -- THE ORIGINAL IMAGE IS SUPERIMPOSED BACK ONTO THE GRAIN FOR MORE REALISM 
-	# https://youtu.be/Vv7lB7n1Fak?t=369
-	# try different blending modes for super-imposition
-	# dehancer allows you to set the grain strength for shadows, midtones and highlights separately
+
+	# Create Group Inputs & Outputs
+	tree.inputs.new('NodeSocketImage','Image')
+	tree.inputs.new('NodeSocketFloat', 'Mix')
+	tree.inputs.new('NodeSocketFloat', 'Grain Scale')
+	tree.inputs.new('NodeSocketFloat', 'Super Impose')
+	tree.inputs.new('NodeSocketFloat', 'Exposure Compensation')
+	tree.outputs.new('NodeSocketImage', 'Image')
+
+	# Connect Everything
+
+	links.new(comp_input.outputs[0], mix_grain.inputs[1]) # Input Image -> Mix 
+	links.new(comp_input.outputs[1], mix_grain.inputs[0]) # Input Mix -> Mix Factor
+	links.new(comp_input.outputs[1], exp_math.inputs[0]) # Input Mix -> Exposure Compensation
+	links.new(comp_input.outputs[4], exp_math.inputs[1]) # Input Exp Comp -> Exposure Compensation
+	links.new(comp_input.outputs[2], grain_scale.inputs[1]) # Input Scale -> Scale X
+	links.new(comp_input.outputs[2], grain_scale.inputs[2]) # Input Scale -> Scale Y
+	links.new(grain.outputs[0], grain_scale.inputs[0]) # Grain -> Scale Image
+	links.new(exp_math.outputs[0], exposure.inputs[1]) # Exposure Compensation -> Exposure Node
+	links.new(grain_scale.outputs[0], mix_superimpose.inputs[1]) # Scale -> SuperImpose
+	links.new(comp_input.outputs[0], mix_superimpose.inputs[2]) # Input Image -> SuperImpose
+	links.new(comp_input.outputs[3], mix_superimpose.inputs[0]) # Input SI -> SuperImpose
+	links.new(mix_superimpose.outputs[0], mix_grain.inputs[2]) # SuperImpose -> Mix
+	links.new(mix_grain.outputs[0], exposure.inputs[0]) # Mix -> Exposure Node
+	links.new(exposure.outputs[0], comp_output.inputs[0]) # Exposure Node -> Output
+
+	# Build Group Node & Set Defaults
+	group = bpy.context.scene.node_tree.nodes.new(type='CompositorNodeGroup')
+	group.name = 'Grain Composite'
+	group.node_tree = bpy.data.node_groups['GrainComposite']
+
+	group.inputs[1].default_value = 0.5 
+	group.inputs[2].default_value = 1.0 
+	group.inputs[3].default_value = 0.0 
+	group.inputs[4].default_value = 1.0
 
 	return 
 
@@ -206,10 +281,8 @@ class GRAINCREATOR_OT_compositeGrain(bpy.types.Operator):
 	bl_options = {'REGISTER', 'UNDO'}
 	bl_description = 'Composite Grain'
 
-	file: bpy.props.StringProperty(name='', default='')
-
 	def execute(self, context):
-		GRAINCREATOR_FN_compositeGrain(self.file)
+		GRAINCREATOR_FN_compositeGrain(self=self, folder=bpy.path.abspath(bpy.context.scene.GRAINCREATOR_VAR_output_dir))
 		return{'FINISHED'}
 
 ############# TEMP
