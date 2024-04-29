@@ -3,7 +3,7 @@
 #--------------------------------------------------------------
 
 bl_info = {
-	"name" : "GrainCreator",
+	"name" : "Grainy",
 	"author" : "SceneFiller",
 	"version" : (1, 0, 0),
 	"blender" : (4, 0, 2),
@@ -288,28 +288,16 @@ class GRAINCREATOR_OT_compositeGrain(bpy.types.Operator):
 		GRAINCREATOR_FN_compositeGrain(self=self, folder=bpy.path.abspath(bpy.context.scene.GRAINCREATOR_VAR_output_dir))
 		return{'FINISHED'}
 
-############# TEMP
-class GRAINCREATOR_OT_clearUnused(bpy.types.Operator):
-	# Purges unused Data Blocks.
-	bl_idname = "graincreator.clear_unused"
-	bl_label = "Clear Unused"
-	bl_description = "Removes unlinked data from the Blend File. WARNING: This process cannot be undone"
-	bl_options = {"REGISTER"}
-
-	def execute(self, context):
-		bpy.ops.outliner.orphans_purge('INVOKE_DEFAULT' if True else 'EXEC_DEFAULT', num_deleted=0, do_local_ids=True, do_linked_ids=False, do_recursive=True)
-		return {'FINISHED'}
-
 #--------------------------------------------------------------
 # Interface
 #--------------------------------------------------------------
 
 class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
-	bl_label = "Grain Creator"
+	bl_label = "Grainy"
 	bl_idname = "GRAINCREATOR_PT_panelMain"
 	bl_space_type = 'NODE_EDITOR'
 	bl_region_type = 'UI'
-	bl_category = 'Grain Creator'
+	bl_category = 'Grainy'
 
 	@classmethod 
 	def poll(cls, context):
@@ -320,6 +308,10 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 		layout = self.layout		
 		view = context.space_data
 		scene = context.scene
+
+		# Generate
+		row = layout.row()
+		row.label(text='Grain Designer: ')
 
 		# Grain Settings
 		row = layout.row()
@@ -335,13 +327,10 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 		# Create Grain
 		row = layout.row()
 		button_create_grain = row.operator(GRAINCREATOR_OT_generateGrain.bl_idname, text="Create Test Frame", icon="FILE_IMAGE")
-	
-		row = layout.row()
-		button_purge = row.operator(GRAINCREATOR_OT_clearUnused.bl_idname, text="purge(TEMP)", icon_value=727)
 
 		# Output Directory
 		row = layout.row()
-		row.label(text='Output Folder: ')
+		row.label(text='Grain Folder: ')
 		row = layout.row()
 		row.prop(scene, 'GRAINCREATOR_VAR_output_dir')
 
@@ -379,7 +368,7 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 #--------------------------------------------------------------
 
 classes_interface = (GRAINCREATOR_PT_panelMain,)
-classes_functionality = (GRAINCREATOR_OT_generateGrain, GRAINCREATOR_OT_exportGrainFrames, GRAINCREATOR_OT_compositeGrain, GRAINCREATOR_OT_clearUnused)
+classes_functionality = (GRAINCREATOR_OT_generateGrain, GRAINCREATOR_OT_exportGrainFrames, GRAINCREATOR_OT_compositeGrain)
 
 bpy.types.Scene.GRAINCREATOR_VAR_clip_min = bpy.props.FloatProperty(name='GRAINCREATOR_VAR_clip_min', default=.5, soft_min=0.0, soft_max=1.0, description='Squash Black Values in Generated Grain.')
 bpy.types.Scene.GRAINCREATOR_VAR_clip_max = bpy.props.FloatProperty(name='GRAINCREATOR_VAR_clip_max', default=.6, soft_min=0.0, soft_max=1.0, description='Squash White Values in Generated Grain.')
