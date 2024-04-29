@@ -62,11 +62,8 @@ def GRAINCREATOR_FN_generateGrain(name, clip_min=.4, clip_max=.7, k=3, sigma=1.0
 	# Generate Grain
 	r = np.random.rand(*pixels_to_paint.shape)
 
-	if monochromatic:
-		pixels_to_paint[:, :, 0:3] = r[:, :, 0:1]	
-	else:
-		pixels_to_paint[:, :, 0:3] = r[:, :, 0:3]		
-
+	pixels_to_paint[:, :, 0:3] = r[:, :, 0:3]	
+			
 	# Clip Values
 	pixels_to_paint = np.clip(pixels_to_paint, clip_min, clip_max)
 
@@ -74,6 +71,12 @@ def GRAINCREATOR_FN_generateGrain(name, clip_min=.4, clip_max=.7, k=3, sigma=1.0
 	kernel = _filter_gaussian(k=k, sig=sigma)
 	blur_result = np.convolve(pixels_to_paint.flatten(), kernel.flatten())
 	pixels = blur_result[:buffer_size].reshape(pixels_to_paint.shape)
+	
+	# Monochromatic
+	if monochromatic:
+		pixels[:, :, 0:3] = pixels[:, :, 0:1]	
+
+	# Conver to float 32
 	pixels_f32 = pixels.astype(np.float32)
 
 	# Fix Alpha to 1.0
