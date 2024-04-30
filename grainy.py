@@ -107,15 +107,23 @@ def GRAINCREATOR_FN_exportFrame(image, idx, folder):
 
 
 def GRAINCREATOR_FN_compositeGrain(self, folder):
+	if folder is None:
+		self.report({'WARNING'}, 'Grain folder not set.')
+		return{'CANCELLED'}
+
 	bpy.context.scene.use_nodes = True 
 	tree = bpy.context.scene.node_tree 
 	nodes = tree.nodes
 
 	frames = list()
 
-	for file_name in os.listdir(folder):
-		if file_name.endswith('.png'):
-			frames.append(file_name)
+	try:
+		for file_name in os.listdir(folder):
+			if file_name.endswith('.png'):
+				frames.append(file_name)
+	except:
+		self.report({'WARNING'}, 'Invalid folder or file.')
+		return{'CANCELLED'}
 
 	num_frames = len(frames)
 
