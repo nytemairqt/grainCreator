@@ -94,7 +94,7 @@ def GRAINCREATOR_FN_generateGrain(name, clip_min=.4, clip_max=.7, k=3, sigma=1.0
 
 	return grain
 
-def GRAINCREATOR_FN_exportFrame(image, idx, folder):
+def GRAINCREATOR_FN_exportFrame(self, image, idx, folder):
 	name = idx
 	if idx < 10:
 		name = f'000{idx}'
@@ -102,8 +102,12 @@ def GRAINCREATOR_FN_exportFrame(image, idx, folder):
 		name = f'00{idx}'
 	if idx >= 100 and idx < 1000:
 		name = f'0{idx}'
-	image.filepath_raw = f'{folder}{name}.png'
-	image.save()
+	try:
+		image.filepath_raw = f'{folder}{name}.png'
+		image.save()
+	except:
+		self.report({'WARNING'}, 'Invalid folder or file.')
+		return{'CANCELLED'}
 
 
 def GRAINCREATOR_FN_compositeGrain(self, folder):
@@ -178,12 +182,20 @@ def GRAINCREATOR_FN_compositeGrain(self, folder):
 	exp_math.operation = 'MULTIPLY'
 
 	# Create Group Inputs & Outputs
-	tree.inputs.new('NodeSocketImage','Image')
-	tree.inputs.new('NodeSocketFloat', 'Mix')
-	tree.inputs.new('NodeSocketFloat', 'Grain Scale')
-	tree.inputs.new('NodeSocketFloat', 'Super Impose')
-	tree.inputs.new('NodeSocketFloat', 'Exposure Compensation')
-	tree.outputs.new('NodeSocketImage', 'Image')
+	if bpy.app.version > (3, 99, 99):
+		tree.interface.new_socket(name='Image', in_out='INPUT', socket_type='NodeSocketColor')
+		tree.interface.new_socket(name='Mix', in_out='INPUT', socket_type='NodeSocketFloat')
+		tree.interface.new_socket(name='Grain Scale', in_out='INPUT', socket_type='NodeSocketFloat')
+		tree.interface.new_socket(name='Super Impose', in_out='INPUT', socket_type='NodeSocketFloat')
+		tree.interface.new_socket(name='Exposure Compensation', in_out='INPUT', socket_type='NodeSocketFloat')
+		tree.interface.new_socket(name='Image', in_out='OUTPUT', socket_type='NodeSocketColor')
+	else:
+		tree.inputs.new('NodeSocketImage','Image')
+		tree.inputs.new('NodeSocketFloat', 'Mix')
+		tree.inputs.new('NodeSocketFloat', 'Grain Scale')
+		tree.inputs.new('NodeSocketFloat', 'Super Impose')
+		tree.inputs.new('NodeSocketFloat', 'Exposure Compensation')
+		tree.outputs.new('NodeSocketImage', 'Image')
 
 	# Connect Everything
 
@@ -266,7 +278,7 @@ class GRAINCREATOR_OT_exportGrainFrames(bpy.types.Operator):
 		# Assert valid Clipping
 		if self.clip_max < self.clip_min:
 			self.report({"WARNING"}, "Invalid clip range.")
-			return{'CANCELLED'}
+			return{'CANCELLED'}		
 
 		# Export grain frames.	
 		bpy.ops.wm.console_toggle()
@@ -281,7 +293,7 @@ class GRAINCREATOR_OT_exportGrainFrames(bpy.types.Operator):
 				sigma=self.sigma,
 				oversampling=self.oversampling,
 				monochromatic=self.monochromatic)	
-			GRAINCREATOR_FN_exportFrame(grain, i+1, folder=bpy.path.abspath(bpy.context.scene.GRAINCREATOR_VAR_output_dir))
+			GRAINCREATOR_FN_exportFrame(self, grain, i+1, folder=bpy.path.abspath(bpy.context.scene.GRAINCREATOR_VAR_output_dir))
 		print('Finishing up...')
 		bpy.ops.wm.console_toggle()
 		return {'FINISHED'}		
@@ -380,7 +392,7 @@ classes_functionality = (GRAINCREATOR_OT_generateGrain, GRAINCREATOR_OT_exportGr
 
 bpy.types.Scene.GRAINCREATOR_VAR_clip_min = bpy.props.FloatProperty(name='GRAINCREATOR_VAR_clip_min', default=.5, soft_min=0.0, soft_max=1.0, description='Squash Black Values in Generated Grain.')
 bpy.types.Scene.GRAINCREATOR_VAR_clip_max = bpy.props.FloatProperty(name='GRAINCREATOR_VAR_clip_max', default=.6, soft_min=0.0, soft_max=1.0, description='Squash White Values in Generated Grain.')
-bpy.types.Scene.GRAINCREATOR_VAR_kernel = bpy.props.IntProperty(name='GRAINCREATOR_VAR_kernel', default=3, soft_min=1, soft_max=16, description='Set Kernel Size for Gaussian Blur.')
+bpy.types.Scene.GRAINCREATOR_VAR_kernel = bpy.props.IntProperty(name='GRAINCREATOR_VAR_kernel', default=3, soft_min=1, soft_max=8, description='Set Kernel Size for Gaussian Blur.')
 bpy.types.Scene.GRAINCREATOR_VAR_sigma = bpy.props.FloatProperty(name='GRAINCREATOR_VAR_sigma', default=1.0, soft_min=0.01, soft_max=5.0, description='Set Sigma for Gaussian Blur.')
 bpy.types.Scene.GRAINCREATOR_VAR_oversampling = bpy.props.BoolProperty(name='GRAINCREATOR_VAR_oversampling', default=False)
 bpy.types.Scene.GRAINCREATOR_VAR_monochromatic = bpy.props.BoolProperty(name='GRAINCREATOR_VAR_monochromatic', default=True)
