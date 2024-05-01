@@ -1,3 +1,20 @@
+'''
+    Copyright 2024 SceneFiller
+
+    This file is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This file is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with This file. If not, see <http://www.gnu.org/licenses/>.
+'''
+
 #--------------------------------------------------------------
 # Meta Dictionary
 #--------------------------------------------------------------
@@ -7,10 +24,10 @@ bl_info = {
 	"author" : "SceneFiller",
 	"version" : (1, 0, 0),
 	"blender" : (4, 0, 2),
-	"location" : "View3d > Tool", # change me
+	"location" : "View3d > Tool",
 	"warning" : "",
 	"wiki_url" : "",
-	"category" : "3D View", # change me 
+	"category" : "3D View",
 }
 
 #--------------------------------------------------------------
@@ -21,11 +38,7 @@ import os
 import bpy
 import bpy_extras
 import numpy as np
-from bpy.props import PointerProperty, BoolProperty
-from bpy_extras.image_utils import load_image
 from pathlib import Path
-from bpy_extras.io_utils import ImportHelper
-import time, sys
 
 #--------------------------------------------------------------
 # Miscellaneous Functions
@@ -42,6 +55,7 @@ def _convert_matrix_to_pixel_buffer(buffer):
 	return buffer		
 
 def _filter_gaussian(k=3, sig=1.0):
+	# Apply a simple gaussian blur filter
 	ax = np.linspace(-(k-1) / 2.0, (k-1) /2.0, k)
 	gaussian = np.exp(-0.5 * np.square(ax) / np.square(sig))
 	kernel = np.outer(gaussian, gaussian)
@@ -145,7 +159,6 @@ def GRAINCREATOR_FN_compositeGrain(self, folder):
 	links = tree.links
 
 	# Create Nodes
-
 	comp_input = nodes.new('NodeGroupInput')	
 	comp_input.location = (-500, 0)	
 	
