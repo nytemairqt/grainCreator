@@ -36,9 +36,7 @@ bl_info = {
 
 import os
 import bpy
-import bpy_extras
 import numpy as np
-from pathlib import Path
 
 #--------------------------------------------------------------
 # Miscellaneous Functions
