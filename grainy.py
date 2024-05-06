@@ -35,6 +35,7 @@ bl_info = {
 #--------------------------------------------------------------
 
 import os
+import platform
 import bpy
 import numpy as np
 
@@ -291,8 +292,9 @@ class GRAINCREATOR_OT_exportGrainFrames(bpy.types.Operator):
 			self.report({"WARNING"}, "Invalid clip range.")
 			return{'CANCELLED'}		
 
-		# Export grain frames.	
-		bpy.ops.wm.console_toggle()
+		# Export grain frames.		
+		if platform.system() != "Linux":
+			bpy.ops.wm.console_toggle()
 		print('Writing Frames...')
 		for i in range(self.frames):
 			print(f'{i}/{self.frames}')
@@ -306,7 +308,8 @@ class GRAINCREATOR_OT_exportGrainFrames(bpy.types.Operator):
 				monochromatic=self.monochromatic)	
 			GRAINCREATOR_FN_exportFrame(self, grain, i+1, folder=bpy.path.abspath(bpy.context.scene.GRAINCREATOR_VAR_output_dir))
 		print('Finishing up...')
-		bpy.ops.wm.console_toggle()
+		if platform.system() != "Linux":
+			bpy.ops.wm.console_toggle()
 		return {'FINISHED'}		
 
 class GRAINCREATOR_OT_compositeGrain(bpy.types.Operator):
