@@ -22,7 +22,7 @@
 bl_info = {
 	"name" : "Grainy",
 	"author" : "SceneFiller",
-	"version" : (1, 0, 0),
+	"version" : (1, 0, 1),
 	"blender" : (4, 0, 2),
 	"location" : "View3d > Tool",
 	"warning" : "",
@@ -333,26 +333,6 @@ def GRAINCREATOR_FN_compositeSCurve(self):
 
 	# Update Final Curve
 	s_curve.mapping.update()
-
-	'''
-			# Create node
-		rgbC = NODES.new("ShaderNodeRGBCurve")
-		# Select "C" curve
-		curve_c = rgbC.mapping.curves[3]
-
-		# Add three points at (1,1) so they're created with [2],[3] and [4] indexes
-		curve_c.points.new(1,1)
-		curve_c.points.new(1,1)
-		curve_c.points.new(1,1)
-
-		# Move the new points to desired (x,y) locations
-		curve_c.points[2].location = (.2, .1)
-		curve_c.points[3].location = (.44, .44)
-		curve_c.points[4].location = (.6, .9)
-
-		# Update curve. Now new points are [1],[2],[3] and last one is [4]
-		rgbC.mapping.update()
-	'''
 	return
 
 #--------------------------------------------------------------
