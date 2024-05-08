@@ -308,6 +308,53 @@ def GRAINCREATOR_FN_compositeHalation(self):
 	group.inputs[2].default_value = 0.25 # Warmth
 	return
 
+def GRAINCREATOR_FN_compositeSCurve(self):
+	bpy.context.scene.use_nodes = True 
+	tree = bpy.context.scene.node_tree 
+	nodes = tree.nodes
+
+	# Create Nodes
+	s_curve = nodes.new(type='CompositorNodeCurveRGB')
+	s_curve.label = 'Film S Curve'
+
+	rgb = s_curve.mapping.curves[3]
+
+	# Clip Endpoints
+	rgb.points[0].location = (0.0, 0.03)
+	rgb.points[1].location = (1.0, 0.97)
+	
+	# Add Shoulders
+	rgb.points.new(0.05, 0.1)
+	rgb.points.new(0.95, 0.9)
+
+	# Add S Curve
+	rgb.points.new(0.388, 0.358)
+	rgb.points.new(0.636, 0.741)
+
+	# Update Final Curve
+	s_curve.mapping.update()
+
+	'''
+			# Create node
+		rgbC = NODES.new("ShaderNodeRGBCurve")
+		# Select "C" curve
+		curve_c = rgbC.mapping.curves[3]
+
+		# Add three points at (1,1) so they're created with [2],[3] and [4] indexes
+		curve_c.points.new(1,1)
+		curve_c.points.new(1,1)
+		curve_c.points.new(1,1)
+
+		# Move the new points to desired (x,y) locations
+		curve_c.points[2].location = (.2, .1)
+		curve_c.points[3].location = (.44, .44)
+		curve_c.points[4].location = (.6, .9)
+
+		# Update curve. Now new points are [1],[2],[3] and last one is [4]
+		rgbC.mapping.update()
+	'''
+	return
+
 #--------------------------------------------------------------
 # Operators
 #--------------------------------------------------------------	
@@ -402,6 +449,17 @@ class GRAINCREATOR_OT_compositeHalation(bpy.types.Operator):
 		GRAINCREATOR_FN_compositeHalation(self=self)		
 		return{'FINISHED'}
 
+class GRAINCREATOR_OT_compositeSCurve(bpy.types.Operator):
+	bl_idname = 'graincreator.composite_s_curve'
+	bl_label = 'Composite S Curve'
+	bl_options = {'REGISTER', 'UNDO'}
+	bl_description = 'Composite S Curve'
+
+	def execute(self, context):
+		GRAINCREATOR_FN_compositeSCurve(self=self)		
+		return{'FINISHED'}
+	
+
 #--------------------------------------------------------------
 # Interface
 #--------------------------------------------------------------
@@ -467,6 +525,9 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 		row = layout.row()
 		button_composite_halation = row.operator(GRAINCREATOR_OT_compositeHalation.bl_idname, text='Add Halation Node', icon='OUTLINER_OB_LIGHT')
 
+		row = layout.row()
+		button_composite_s_curve = row.operator(GRAINCREATOR_OT_compositeSCurve.bl_idname, text='Add Film S Curve', icon='FCURVE')
+
 
 		# Assign Variables
 		button_create_grain.clip_min = context.scene.GRAINCREATOR_VAR_clip_min
@@ -490,7 +551,7 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 #--------------------------------------------------------------
 
 classes_interface = (GRAINCREATOR_PT_panelMain,)
-classes_functionality = (GRAINCREATOR_OT_generateGrain, GRAINCREATOR_OT_exportGrainFrames, GRAINCREATOR_OT_compositeGrain, GRAINCREATOR_OT_compositeHalation)
+classes_functionality = (GRAINCREATOR_OT_generateGrain, GRAINCREATOR_OT_exportGrainFrames, GRAINCREATOR_OT_compositeGrain, GRAINCREATOR_OT_compositeHalation, GRAINCREATOR_OT_compositeSCurve)
 
 bpy.types.Scene.GRAINCREATOR_VAR_clip_min = bpy.props.FloatProperty(name='GRAINCREATOR_VAR_clip_min', default=.5, soft_min=0.0, soft_max=1.0, description='Squash Black Values in Generated Grain.')
 bpy.types.Scene.GRAINCREATOR_VAR_clip_max = bpy.props.FloatProperty(name='GRAINCREATOR_VAR_clip_max', default=.6, soft_min=0.0, soft_max=1.0, description='Squash White Values in Generated Grain.')
