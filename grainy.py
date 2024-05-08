@@ -235,8 +235,78 @@ def GRAINCREATOR_FN_compositeGrain(self, folder):
 	group.inputs[2].default_value = 1.0 
 	group.inputs[3].default_value = 0.0 
 	group.inputs[4].default_value = 1.0
-
 	return 
+
+def GRAINCREATOR_FN_compositeHalation(self):
+	bpy.context.scene.use_nodes = True 
+	tree = bpy.context.scene.node_tree 
+	nodes = tree.nodes
+
+	composite_tree = bpy.data.node_groups.new('HalationComposite', 'CompositorNodeTree')
+	tree = composite_tree
+	nodes = composite_tree.nodes
+	links = tree.links
+
+	# Create Nodes
+	comp_input = nodes.new('NodeGroupInput')	
+	comp_input.location = (-500, 0)	
+	
+	split_rgb = nodes.new(type='CompositorNodeSeparateColor')
+	split_rgb.location = (-500, -200)
+
+	blur = nodes.new(type='CompositorNodeBlur')
+	blur.location = (-200, -200)
+
+	map_range = nodes.new(type='CompositorNodeMapRange')
+	map_range.location = (-400, -400)
+
+	combine_rgb = nodes.new(type='CompositorNodeCombineColor')
+	combine_rgb.location = (500, -200)
+
+	comp_output = nodes.new('NodeGroupOutput')
+	comp_output.location = (500, 0)
+
+	color_balance = nodes.new(type="CompositorNodeColorBalance")
+	color_balance.location = (700, -200)
+
+	# Create Group Inputs & Outputs
+	if bpy.app.version > (3, 99, 99):
+		tree.interface.new_socket(name='Image', in_out='INPUT', socket_type='NodeSocketColor')
+		tree.interface.new_socket(name='Strength', in_out='INPUT', socket_type='NodeSocketFloat')
+		tree.interface.new_socket(name='Warmth', in_out='INPUT', socket_type='NodeSocketFloat')
+		tree.interface.new_socket(name='Image', in_out='OUTPUT', socket_type='NodeSocketColor')
+	else:
+		tree.inputs.new('NodeSocketImage','Image')
+		tree.inputs.new('NodeSocketFloat', 'Strength')
+		tree.inputs.new('NodeSocketFloat', 'Warmth')
+		tree.outputs.new('NodeSocketImage', 'Image')
+
+	# Connect Everything
+	links.new(comp_input.outputs[0], split_rgb.inputs[0]) # Input Image -> Separate Color 
+	links.new(split_rgb.outputs[0], blur.inputs[0]) # Red Channel -> Blur
+	links.new(split_rgb.outputs[0], map_range.inputs[0]) # Red Channel -> Map Range
+	links.new(map_range.outputs[0], blur.inputs[1]) # Map Range -> Blur Size
+	links.new(comp_input.outputs[1], map_range.inputs[3]) # Strength -> Map Range To Min
+	links.new(blur.outputs[0], combine_rgb.inputs[0]) # Blur -> Red Channel
+	links.new(split_rgb.outputs[1], combine_rgb.inputs[1]) # Green Channel -> Green Channel
+	links.new(split_rgb.outputs[2], combine_rgb.inputs[2]) # Blue Channel -> Blue Channel
+	links.new(split_rgb.outputs[3], combine_rgb.inputs[3]) # Alpha Channel -> Alpha Channel
+	links.new(comp_input.outputs[2], color_balance.inputs[0]) # Warmth -> Color Balance
+	links.new(combine_rgb.outputs[0], color_balance.inputs[1]) # Combine -> Color Balance
+	links.new(color_balance.outputs[0], comp_output.inputs[0]) # Color Balance -> Output
+
+	# Build Group Node & Set Defaults
+	group = bpy.context.scene.node_tree.nodes.new(type='CompositorNodeGroup')
+	group.name = 'Halation'
+	group.node_tree = bpy.data.node_groups['HalationComposite']
+
+	color_balance.gamma = (1.05042, 0.982923, 0.964609)
+	blur.use_variable_size = True
+	blur.size_x = 10
+	blur.size_y = 10
+	group.inputs[1].default_value = 0.25 # Strength
+	group.inputs[2].default_value = 0.25 # Warmth
+	return
 
 #--------------------------------------------------------------
 # Operators
@@ -322,6 +392,16 @@ class GRAINCREATOR_OT_compositeGrain(bpy.types.Operator):
 		GRAINCREATOR_FN_compositeGrain(self=self, folder=bpy.path.abspath(bpy.context.scene.GRAINCREATOR_VAR_output_dir))
 		return{'FINISHED'}
 
+class GRAINCREATOR_OT_compositeHalation(bpy.types.Operator):
+	bl_idname = 'graincreator.composite_halation'
+	bl_label = 'Composite Halation'
+	bl_options = {'REGISTER', 'UNDO'}
+	bl_description = 'Composite Halation'
+
+	def execute(self, context):
+		GRAINCREATOR_FN_compositeHalation(self=self)		
+		return{'FINISHED'}
+
 #--------------------------------------------------------------
 # Interface
 #--------------------------------------------------------------
@@ -380,6 +460,14 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 		row = layout.row()
 		button_composite_grain = row.operator(GRAINCREATOR_OT_compositeGrain.bl_idname, text='Composite Grain', icon="FILE_IMAGE")
 
+		# Extras
+		row = layout.row()
+		row.label(text='Extras: ')
+
+		row = layout.row()
+		button_composite_halation = row.operator(GRAINCREATOR_OT_compositeHalation.bl_idname, text='Add Halation Node', icon='OUTLINER_OB_LIGHT')
+
+
 		# Assign Variables
 		button_create_grain.clip_min = context.scene.GRAINCREATOR_VAR_clip_min
 		button_create_grain.clip_max = context.scene.GRAINCREATOR_VAR_clip_max
@@ -402,7 +490,7 @@ class GRAINCREATOR_PT_panelMain(bpy.types.Panel):
 #--------------------------------------------------------------
 
 classes_interface = (GRAINCREATOR_PT_panelMain,)
-classes_functionality = (GRAINCREATOR_OT_generateGrain, GRAINCREATOR_OT_exportGrainFrames, GRAINCREATOR_OT_compositeGrain)
+classes_functionality = (GRAINCREATOR_OT_generateGrain, GRAINCREATOR_OT_exportGrainFrames, GRAINCREATOR_OT_compositeGrain, GRAINCREATOR_OT_compositeHalation)
 
 bpy.types.Scene.GRAINCREATOR_VAR_clip_min = bpy.props.FloatProperty(name='GRAINCREATOR_VAR_clip_min', default=.5, soft_min=0.0, soft_max=1.0, description='Squash Black Values in Generated Grain.')
 bpy.types.Scene.GRAINCREATOR_VAR_clip_max = bpy.props.FloatProperty(name='GRAINCREATOR_VAR_clip_max', default=.6, soft_min=0.0, soft_max=1.0, description='Squash White Values in Generated Grain.')
